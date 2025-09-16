@@ -21,12 +21,20 @@ export default function Home() {
 
   const handleImportTransactions = (importedTransactions: Transaction[]) => {
     if (accounts.length === 0) {
-      alert('Please add an account before importing transactions.');
-      return;
+      const allHaveAccountId = importedTransactions.every(t => t.accountId && t.accountId.trim() !== '');
+      if (!allHaveAccountId) {
+        alert('Please add an account before importing transactions.');
+        return;
+      }
     }
     // If multiple accounts are selected (e.g., 'Select All'), default to the first account.
-    const targetAccountId = selectedAccounts.length === 1 ? selectedAccounts[0].id : accounts[0].id;
-    const transactionsWithAccountId = importedTransactions.map(t => ({ ...t, accountId: targetAccountId }));
+    const defaultAccountId = accounts.length > 0
+      ? (selectedAccounts.length === 1 ? selectedAccounts[0].id : accounts[0].id)
+      : '';
+    const transactionsWithAccountId = importedTransactions.map(t => ({
+      ...t,
+      accountId: t.accountId && t.accountId.trim() !== '' ? t.accountId : defaultAccountId,
+    }));
     setTransactions(prev => [...prev, ...transactionsWithAccountId]);
     alert('Transactions imported successfully!');
   };
@@ -54,9 +62,11 @@ export default function Home() {
             </div>
 
             <div className="space-y-8">
+              {accounts.length > 0 && (
               <div className="card">
                 <AddTransactionForm onAddTransaction={handleAddTransaction} />
               </div>
+              )}
               <div className="card">
                 <DataImportExport transactions={filteredTransactions} onImport={handleImportTransactions} />
               </div>

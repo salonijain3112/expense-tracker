@@ -4,6 +4,8 @@ import { useRef } from 'react';
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
 import { Transaction } from '@/types';
+import { extractImportedRows } from '@/utils/importers';
+import { useAccounts } from '@/context/AccountContext';
 
 interface DataImportExportProps {
   transactions: Transaction[];
@@ -12,6 +14,7 @@ interface DataImportExportProps {
 
 const DataImportExport = ({ transactions, onImport }: DataImportExportProps) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { accounts, selectedAccounts, addAccount } = useAccounts();
 
   const handleExportCSV = () => {
     const csv = Papa.unparse(transactions);
@@ -33,21 +36,55 @@ const DataImportExport = ({ transactions, onImport }: DataImportExportProps) => 
     XLSX.writeFile(workbook, "transactions.xlsx");
   };
 
-  const processImportedData = (data: Omit<Transaction, 'id'>[]) => {
-    const validTransactions = data
-      .map((row) => ({
-        ...row,
-        amount: parseFloat(row.amount as any),
-      }))
-      .filter(
-        (row) =>
-          row.description &&
-          row.amount > 0 &&
-          (row.type === 'income' || row.type === 'expense')
-      );
+  const processImportedData = (rows: any[]): boolean => {
+    try {
+      const extracted = extractImportedRows(rows);
+      // Build a case-insensitive name->id map
+      const nameToId = new Map<string, string>(accounts.map(a => [a.name.trim().toLowerCase(), a.id]));
+      const defaultAccountId = accounts.length > 0
+        ? (selectedAccounts.length === 1 ? selectedAccounts[0].id : (accounts[0]?.id || ''))
+        : '';
 
-    const newTransactions: Transaction[] = validTransactions.map(t => ({ ...t, id: crypto.randomUUID() }));
-    onImport(newTransactions);
+      // If there are no accounts yet, or some account names from the file are missing,
+      // create them on the fly using addAccount.
+      const palette = ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4'];
+      let colorIdx = 0;
+      const ensureAccount = (name: string): string => {
+        const key = name.trim().toLowerCase();
+        const existing = nameToId.get(key);
+        if (existing) return existing;
+        if (!name) return defaultAccountId; // fallback
+        const color = palette[colorIdx % palette.length];
+        colorIdx += 1;
+        const created = addAccount({ name: name.trim(), color, openingBalance: 0 });
+        nameToId.set(key, created.id);
+        return created.id;
+      };
+
+      const newTransactions: Transaction[] = extracted.map(({ tx, accountName }) => {
+        let accountId = tx.accountId;
+        if (!accountId) {
+          if (accountName && accountName.trim() !== '') {
+            // Use or create account from file
+            accountId = ensureAccount(accountName);
+          } else if (accounts.length > 0) {
+            // Fallback to selected or first account
+            accountId = defaultAccountId;
+          } else {
+            accountId = '';
+          }
+        }
+        return { ...tx, accountId: accountId || '', id: crypto.randomUUID() } as Transaction;
+      });
+      if (newTransactions.length === 0) {
+        return false;
+      }
+      onImport(newTransactions);
+      return true;
+    } catch (e) {
+      console.error('Normalization failed:', e);
+      return false;
+    }
   };
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -57,11 +94,15 @@ const DataImportExport = ({ transactions, onImport }: DataImportExportProps) => 
     const reader = new FileReader();
 
     if (file.name.endsWith('.csv')) {
-      Papa.parse<Omit<Transaction, 'id'>>(file, {
+      Papa.parse<any>(file, {
         header: true,
         skipEmptyLines: true,
         complete: (results) => {
-          processImportedData(results.data);
+          const ok = processImportedData(results.data as any[]);
+          if (!ok) {
+            console.debug('[Import][CSV] Headers:', results.meta?.fields);
+            alert('No valid transactions found in the CSV. Please check the headers and data.');
+          }
         },
         error: (error) => {
           console.error('Error parsing CSV:', error);
@@ -75,8 +116,32 @@ const DataImportExport = ({ transactions, onImport }: DataImportExportProps) => 
           const workbook = XLSX.read(data, { type: 'array' });
           const sheetName = workbook.SheetNames[0];
           const worksheet = workbook.Sheets[sheetName];
-          const json = XLSX.utils.sheet_to_json<Omit<Transaction, 'id'>>(worksheet);
-          processImportedData(json);
+          // Always parse as rows to explicitly pick column J (date/time)
+          const rowsArr = XLSX.utils.sheet_to_json<any[]>(worksheet, { header: 1, raw: false });
+          console.debug('[Import] Rows(header=1) len=', rowsArr.length, 'firstHeaderRow=', rowsArr[0]);
+          if (rowsArr.length >= 2) {
+            const headerRow = (rowsArr[0] as any[]).map(h => String(h || '').trim());
+            const objects = rowsArr.slice(1)
+              .filter(r => Array.isArray(r))
+              .map((rArr: any[]) => {
+                const obj: Record<string, any> = {};
+                headerRow.forEach((key, idx) => {
+                  obj[key] = rArr[idx];
+                });
+                // Column J is index 9 (0-based). Force date from J.
+                if (rArr.length > 9 && rArr[9] !== undefined && rArr[9] !== null && String(rArr[9]).trim() !== '') {
+                  obj['date'] = rArr[9];
+                }
+                return obj;
+              });
+            console.debug('[Import] Objects with J-date len=', objects.length, 'sample=', objects[0]);
+            const ok = processImportedData(objects as any[]);
+            if (!ok) {
+              alert('No valid transactions found in the Excel file. Please check the headers and data.');
+            }
+          } else {
+            throw new Error('No data rows found in sheet');
+          }
         } catch (error) {
           console.error('Error processing Excel file:', error);
           alert('Failed to process Excel file.');

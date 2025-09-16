@@ -5,7 +5,7 @@ import { Account } from '../types';
 
 interface AccountContextType {
   accounts: Account[];
-  addAccount: (account: Omit<Account, 'id'>) => void;
+  addAccount: (account: Omit<Account, 'id'>) => Account;
   selectedAccounts: Account[];
   setSelectedAccountIds: (accountIds: string[]) => void;
 }
@@ -16,11 +16,12 @@ export const AccountProvider = ({ children }: { children: ReactNode }) => {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [selectedAccountIds, setSelectedAccountIds] = useState<string[]>([]);
 
-  const addAccount = (account: Omit<Account, 'id'>) => {
-    const newAccount = { ...account, id: new Date().toISOString() };
+  const addAccount = (account: Omit<Account, 'id'>): Account => {
+    const newAccount: Account = { ...account, id: crypto.randomUUID() };
     setAccounts(prevAccounts => [...prevAccounts, newAccount]);
     // Automatically select the new account
     setSelectedAccountIds(prevIds => [...prevIds, newAccount.id]);
+    return newAccount;
   };
 
   const selectedAccounts = accounts.filter(acc => selectedAccountIds.includes(acc.id));

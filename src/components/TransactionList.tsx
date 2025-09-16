@@ -57,7 +57,7 @@ const TransactionList = ({ transactions }: TransactionListProps) => {
                   <p className="font-medium text-gray-900 dark:text-dark-text">{description}</p>
                   <p className="text-sm text-gray-500 dark:text-dark-subtle">
                     <span className="font-semibold">{account?.name}</span>
-                    {transaction.date ? ` | ${new Date(transaction.date).toLocaleDateString()}` : ''}
+                    {transaction.date ? ` | ${new Date(transaction.date).toLocaleString(undefined, { year: 'numeric', month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' })}` : ''}
                   </p>
                 </div>
               </div>
