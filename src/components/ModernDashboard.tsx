@@ -50,6 +50,7 @@ const ModernDashboard: React.FC<ModernDashboardProps> = ({
     
     const recentExpenses = transactions.filter(t => 
       t.type === 'expense' && 
+      t.date && 
       new Date(t.date) >= thirtyDaysAgo
     );
     
