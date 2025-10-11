@@ -1,56 +1,52 @@
 import { Transaction } from '@/types';
 
-// Heuristics to normalize various imported schemas into our Transaction shape (without id)
-export type RawRow = Record<string, any>;
+export type RawRow = Record<string, string | number | Date | null | undefined>;
 
 function toLowerNoSpaces(s?: string) {
   return (s || '').toLowerCase().replace(/\s+/g, '');
 }
 
-function parseAmount(value: any): number | null {
+function parseAmount(value: string | number | Date | null | undefined): number | null {
   if (value == null) return null;
+  if (value instanceof Date) {
+    return null;
+  }
   const n = typeof value === 'number' ? value : parseFloat(String(value).replace(/[,\s]/g, ''));
   if (Number.isNaN(n)) return null;
   return n;
 }
 
-function parseDate(value: any): Date | undefined {
+function parseDate(value: string | number | Date | null | undefined): Date | undefined {
   if (!value) return undefined;
-  // xlsx may provide a JS Date already
   if (value instanceof Date) return value;
   const s = String(value).trim();
-  // Handle common bank format: "YYYY-MM-DD HH:mm:ss" (treat as local time)
   const match = s.match(/^(\d{4}-\d{2}-\d{2})\s(\d{2}:\d{2}:\d{2})$/);
   if (match) {
-    const isoLike = `${match[1]}T${match[2]}`; // local time
+    const isoLike = `${match[1]}T${match[2]}`;
     const d = new Date(isoLike);
     if (!isNaN(d.getTime())) return d;
   }
-  // Try direct ISO parse as a fallback
   const d2 = new Date(s);
   if (!isNaN(d2.getTime())) return d2;
   return undefined;
 }
 
-function normalizeType(rawType: any, amount: number | null): 'income' | 'expense' | null {
+function normalizeType(rawType: string | number | Date | null | undefined, amount: number | null): 'income' | 'expense' | null {
   const t = toLowerNoSpaces(String(rawType || ''));
   if (t === 'income') return 'income';
   if (t === 'expenses' || t === 'expense') return 'expense';
   if (amount != null) {
-    // Fallback: sign-based inference
     return amount >= 0 ? 'income' : 'expense';
   }
   return null;
 }
 
-// Detects if the header set matches the provided file (account, category, currency, amount, ref_currency_amount, type, payment_type, payment_type_local, note, date, ...)
 function looksLikeReportSchema(headers: string[]): boolean {
   const expected = ['account', 'category', 'currency', 'amount', 'type', 'note', 'date'];
   const set = new Set(headers.map(h => h.toLowerCase()));
   return expected.every(e => set.has(e));
 }
 
-// Detect a simple generic schema we already supported earlier
 function looksLikeGenericSchema(headers: string[]): boolean {
   const set = new Set(headers.map(h => h.toLowerCase()));
   return set.has('description') && set.has('amount');
@@ -58,7 +54,6 @@ function looksLikeGenericSchema(headers: string[]): boolean {
 
 export function normalizeImportedRows(rows: RawRow[]): Omit<Transaction, 'id'>[] {
   if (!rows || rows.length === 0) return [];
-  // Normalize headers: in case xlsx used different casing
   const headers = Array.from(new Set(Object.keys(rows[0] || {}).map(h => h.trim())));
   const lowerHeaderMap = new Map(headers.map(h => [h.toLowerCase(), h]));
 
@@ -89,10 +84,9 @@ export function normalizeImportedRows(rows: RawRow[]): Omit<Transaction, 'id'>[]
         description: description || 'Transaction',
         amount: Math.abs(amount),
         type,
-        date,
+        date: date ? date.toISOString() : undefined,
       });
     } else {
-      // generic: description, amount, optional type, date
       const description = String(get(row, 'description') ?? '').trim();
       const amount = parseAmount(get(row, 'amount'));
       const type = normalizeType(get(row, 'type'), amount);
@@ -107,7 +101,7 @@ export function normalizeImportedRows(rows: RawRow[]): Omit<Transaction, 'id'>[]
         description,
         amount: Math.abs(amount),
         type,
-        date,
+        date: date ? date.toISOString() : undefined,
       });
     }
   }
@@ -115,7 +109,6 @@ export function normalizeImportedRows(rows: RawRow[]): Omit<Transaction, 'id'>[]
   return out;
 }
 
-// Returns normalized transactions plus any detected account name per row for mapping by caller
 export function extractImportedRows(rows: RawRow[]): { tx: Omit<Transaction, 'id'>; accountName?: string }[] {
   if (!rows || rows.length === 0) return [];
   const headers = Array.from(new Set(Object.keys(rows[0] || {}).map(h => h.trim())));
@@ -139,11 +132,11 @@ export function extractImportedRows(rows: RawRow[]): { tx: Omit<Transaction, 'id
       if (amount == null || type == null) continue;
       out.push({
         tx: {
-          accountId: '',
+          accountId: '', // will be set by caller based on account mapping
           description: description || 'Transaction',
           amount: Math.abs(amount),
           type,
-          date,
+          date: date ? date.toISOString() : undefined,
         },
         accountName: accountName || undefined,
       });
@@ -153,15 +146,16 @@ export function extractImportedRows(rows: RawRow[]): { tx: Omit<Transaction, 'id
       const type = normalizeType(get(row, 'type'), amount);
       const date = parseDate(get(row, 'date'));
       const accountName = String(get(row, 'account') ?? '').trim();
+
       if (!description && amount == null) continue;
       if (amount == null || type == null) continue;
       out.push({
         tx: {
-          accountId: '',
+          accountId: '', // will be set by caller based on account mapping
           description,
           amount: Math.abs(amount),
           type,
-          date,
+          date: date ? date.toISOString() : undefined,
         },
         accountName: accountName || undefined,
       });

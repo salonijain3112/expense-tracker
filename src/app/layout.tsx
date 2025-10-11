@@ -3,6 +3,7 @@ import "./globals.css";
 import { CurrencyProvider } from '@/context/CurrencyContext';
 import { AccountProvider } from '@/context/AccountContext';
 import { TransactionProvider } from '@/context/TransactionContext';
+import { AuthProvider } from '@/context/AuthContext';
 
 export const metadata: Metadata = {
   title: "Expense Tracker",
@@ -17,11 +18,13 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="antialiased">
-        <AccountProvider>
-          <TransactionProvider>
-            <CurrencyProvider>{children}</CurrencyProvider>
-          </TransactionProvider>
-        </AccountProvider>
+        <AuthProvider>
+          <AccountProvider>
+            <TransactionProvider>
+              <CurrencyProvider>{children}</CurrencyProvider>
+            </TransactionProvider>
+          </AccountProvider>
+        </AuthProvider>
       </body>
     </html>
   );

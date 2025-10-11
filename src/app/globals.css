@@ -12,4 +12,15 @@
   .card {
     @apply bg-white dark:bg-dark-card rounded-xl shadow-lg p-6;
   }
+  
+  /* Mobile-specific adjustments */
+  @media (max-width: 1023px) {
+    .card {
+      @apply p-4;
+    }
+    
+    .container {
+      @apply px-3;
+    }
+  }
 }

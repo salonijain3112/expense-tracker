@@ -11,17 +11,27 @@ interface AddAccountFormProps {
 export const AddAccountForm = ({ onClose }: AddAccountFormProps) => {
   const { addAccount } = useAccounts();
   const [name, setName] = useState('');
-  const [openingBalance, setOpeningBalance] = useState('0');
+  const [opening_balance, setOpening_balance] = useState('0');
   const [color, setColor] = useState('#FF5733'); // Default color
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    addAccount({
-      name,
-      openingBalance: parseFloat(openingBalance) || 0,
-      color,
-    });
-    onClose();
+    if (isSubmitting) return;
+
+    setIsSubmitting(true);
+    try {
+      await addAccount({
+        name,
+        opening_balance: parseFloat(opening_balance) || 0,
+        color,
+      });
+      onClose();
+    } catch (error) {
+      console.error('Failed to add account', error);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleColorChange = (color: ColorResult) => {
@@ -33,36 +43,40 @@ export const AddAccountForm = ({ onClose }: AddAccountFormProps) => {
       <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-sm z-50 dark:bg-dark-secondary">
         <h2 className="text-xl font-semibold mb-4 dark:text-white">Add New Account</h2>
         <form onSubmit={handleSubmit}>
-          <div className="mb-4">
-            <label htmlFor="name" className="block text-sm font-medium text-gray-700 dark:text-dark-text">Account Name</label>
-            <input
-              type="text"
-              id="name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm dark:bg-dark-hover dark:border-gray-600 dark:placeholder-gray-400 dark:text-white"
-              required
-            />
-          </div>
-          <div className="mb-4">
-            <label htmlFor="openingBalance" className="block text-sm font-medium text-gray-700 dark:text-dark-text">Opening Balance</label>
-            <input
-              type="number"
-              id="openingBalance"
-              value={openingBalance}
-              onChange={(e) => setOpeningBalance(e.target.value)}
-              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm dark:bg-dark-hover dark:border-gray-600 dark:placeholder-gray-400 dark:text-white"
-              placeholder="0"
-            />
-          </div>
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 dark:text-dark-text mb-2">Account Color</label>
-            <CirclePicker color={color} onChangeComplete={handleColorChange} />
-          </div>
-          <div className="flex justify-end space-x-2">
-            <button type="button" onClick={onClose} className="px-4 py-2 bg-gray-200 rounded-md hover:bg-gray-300 dark:bg-dark-hover dark:text-dark-text">Cancel</button>
-            <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">Add Account</button>
-          </div>
+          <fieldset disabled={isSubmitting} className="space-y-4">
+            <div>
+              <label htmlFor="name" className="block text-sm font-medium text-gray-700 dark:text-dark-text">Account Name</label>
+              <input
+                type="text"
+                id="name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm dark:bg-dark-hover dark:border-gray-600 dark:placeholder-gray-400 dark:text-white disabled:opacity-50"
+                required
+              />
+            </div>
+            <div>
+              <label htmlFor="opening_balance" className="block text-sm font-medium text-gray-700 dark:text-dark-text">Opening Balance</label>
+              <input
+                type="number"
+                id="opening_balance"
+                value={opening_balance}
+                onChange={(e) => setOpening_balance(e.target.value)}
+                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm dark:bg-dark-hover dark:border-gray-600 dark:placeholder-gray-400 dark:text-white disabled:opacity-50"
+                placeholder="0"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-dark-text mb-2">Account Color</label>
+              <CirclePicker color={color} onChangeComplete={handleColorChange} />
+            </div>
+            <div className="flex justify-end space-x-2 pt-4">
+              <button type="button" onClick={onClose} className="px-4 py-2 bg-gray-200 rounded-md hover:bg-gray-300 dark:bg-dark-hover dark:text-dark-text disabled:opacity-50" disabled={isSubmitting}>Cancel</button>
+              <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50" disabled={isSubmitting}>
+                {isSubmitting ? 'Adding...' : 'Add Account'}
+              </button>
+            </div>
+          </fieldset>
         </form>
       </div>
     </div>

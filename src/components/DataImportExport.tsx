@@ -36,46 +36,68 @@ const DataImportExport = ({ transactions, onImport }: DataImportExportProps) => 
     XLSX.writeFile(workbook, "transactions.xlsx");
   };
 
-  const processImportedData = (rows: any[]): boolean => {
+  const processImportedData = async (rows: any[]): Promise<boolean> => {
     try {
       const extracted = extractImportedRows(rows);
-      // Build a case-insensitive name->id map
       const nameToId = new Map<string, string>(accounts.map(a => [a.name.trim().toLowerCase(), a.id]));
       const defaultAccountId = accounts.length > 0
         ? (selectedAccounts.length === 1 ? selectedAccounts[0].id : (accounts[0]?.id || ''))
         : '';
 
-      // If there are no accounts yet, or some account names from the file are missing,
-      // create them on the fly using addAccount.
+      const uniqueAccountNames = new Set<string>();
+      extracted.forEach(({ accountName }) => {
+        if (accountName && accountName.trim() !== '') {
+          uniqueAccountNames.add(accountName.trim());
+        }
+      });
+
       const palette = ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4'];
       let colorIdx = 0;
-      const ensureAccount = (name: string): string => {
-        const key = name.trim().toLowerCase();
+      
+      for (const accountName of uniqueAccountNames) {
+        const key = accountName.toLowerCase();
         const existing = nameToId.get(key);
-        if (existing) return existing;
-        if (!name) return defaultAccountId; // fallback
-        const color = palette[colorIdx % palette.length];
-        colorIdx += 1;
-        const created = addAccount({ name: name.trim(), color, openingBalance: 0 });
-        nameToId.set(key, created.id);
-        return created.id;
-      };
-
-      const newTransactions: Transaction[] = extracted.map(({ tx, accountName }) => {
-        let accountId = tx.accountId;
-        if (!accountId) {
-          if (accountName && accountName.trim() !== '') {
-            // Use or create account from file
-            accountId = ensureAccount(accountName);
-          } else if (accounts.length > 0) {
-            // Fallback to selected or first account
-            accountId = defaultAccountId;
-          } else {
-            accountId = '';
+        
+        if (!existing) {
+          const color = palette[colorIdx % palette.length];
+          colorIdx += 1;
+          
+          try {
+            const created = await addAccount({ 
+              name: accountName, 
+              color, 
+              opening_balance: 0 
+            });
+            
+            if (created) {
+              nameToId.set(key, created.id);
+              console.log(`Created new account: "${accountName}" with ID: ${created.id}`);
+            } else {
+              console.warn(`Failed to create account "${accountName}", will use default account`);
+            }
+          } catch (error) {
+            console.error(`Failed to create account "${accountName}":`, error);
           }
         }
+      }
+
+      const newTransactions = extracted.map(({ tx, accountName }) => {
+        let accountId = '';
+        
+        if (accountName && accountName.trim() !== '') {
+          const key = accountName.trim().toLowerCase();
+          accountId = nameToId.get(key) || defaultAccountId;
+        } else if (accounts.length > 0) {
+          accountId = defaultAccountId;
+        }
+        
+        if (!accountId && defaultAccountId) {
+          accountId = defaultAccountId;
+        }
+        
         return { ...tx, accountId: accountId || '', id: crypto.randomUUID() } as Transaction;
       });
+      
       if (newTransactions.length === 0) {
         return false;
       }
@@ -97,8 +119,8 @@ const DataImportExport = ({ transactions, onImport }: DataImportExportProps) => 
       Papa.parse<any>(file, {
         header: true,
         skipEmptyLines: true,
-        complete: (results) => {
-          const ok = processImportedData(results.data as any[]);
+        complete: async (results) => {
+          const ok = await processImportedData(results.data as any[]);
           if (!ok) {
             console.debug('[Import][CSV] Headers:', results.meta?.fields);
             alert('No valid transactions found in the CSV. Please check the headers and data.');
@@ -110,17 +132,16 @@ const DataImportExport = ({ transactions, onImport }: DataImportExportProps) => 
         },
       });
     } else if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
-      reader.onload = (e) => {
+      reader.onload = async (e) => {
         try {
           const data = e.target?.result;
           const workbook = XLSX.read(data, { type: 'array' });
           const sheetName = workbook.SheetNames[0];
           const worksheet = workbook.Sheets[sheetName];
-          // Always parse as rows to explicitly pick column J (date/time)
           const rowsArr = XLSX.utils.sheet_to_json<any[]>(worksheet, { header: 1, raw: false });
           console.debug('[Import] Rows(header=1) len=', rowsArr.length, 'firstHeaderRow=', rowsArr[0]);
           if (rowsArr.length >= 2) {
-            const headerRow = (rowsArr[0] as any[]).map(h => String(h || '').trim());
+            const headerRow = (rowsArr[0] as any[]).map(h => String(h || '').trim().toLowerCase());
             const objects = rowsArr.slice(1)
               .filter(r => Array.isArray(r))
               .map((rArr: any[]) => {
@@ -128,14 +149,10 @@ const DataImportExport = ({ transactions, onImport }: DataImportExportProps) => 
                 headerRow.forEach((key, idx) => {
                   obj[key] = rArr[idx];
                 });
-                // Column J is index 9 (0-based). Force date from J.
-                if (rArr.length > 9 && rArr[9] !== undefined && rArr[9] !== null && String(rArr[9]).trim() !== '') {
-                  obj['date'] = rArr[9];
-                }
                 return obj;
               });
-            console.debug('[Import] Objects with J-date len=', objects.length, 'sample=', objects[0]);
-            const ok = processImportedData(objects as any[]);
+            console.debug('[Import] Objects len=', objects.length, 'sample=', objects[0]);
+            const ok = await processImportedData(objects as any[]);
             if (!ok) {
               alert('No valid transactions found in the Excel file. Please check the headers and data.');
             }
@@ -173,7 +190,7 @@ const DataImportExport = ({ transactions, onImport }: DataImportExportProps) => 
           className="w-full flex items-center justify-center gap-2 px-4 py-2 border border-dashed border-gray-400 dark:border-gray-600 rounded-lg text-sm font-medium text-gray-500 dark:text-dark-subtle hover:bg-gray-100 dark:hover:bg-dark-card focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-accent dark:focus:ring-offset-dark-bg transition-all"
         >
           <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+            <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4 4m0 0L8 8m4-4v12" />
           </svg>
           <span>Click to upload a file</span>
         </button>
@@ -197,7 +214,7 @@ const DataImportExport = ({ transactions, onImport }: DataImportExportProps) => 
             className="w-full flex items-center justify-center gap-2 px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg text-sm font-medium text-gray-900 dark:text-dark-text bg-brand-secondary dark:bg-dark-bg hover:bg-gray-200 dark:hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-accent dark:focus:ring-offset-dark-card disabled:opacity-50 disabled:cursor-not-allowed transition-all"
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0L8 8m4-4v12" />
             </svg>
             <span>Export CSV</span>
           </button>
@@ -207,7 +224,7 @@ const DataImportExport = ({ transactions, onImport }: DataImportExportProps) => 
             className="w-full flex items-center justify-center gap-2 px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg text-sm font-medium text-gray-900 dark:text-dark-text bg-brand-secondary dark:bg-dark-bg hover:bg-gray-200 dark:hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-accent dark:focus:ring-offset-dark-card disabled:opacity-50 disabled:cursor-not-allowed transition-all"
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0L8 8m4-4v12" />
             </svg>
             <span>Export Excel</span>
           </button>

@@ -30,7 +30,6 @@ const TransactionList = ({ transactions }: TransactionListProps) => {
                 description = `Transfer to ${toAccount.name}`;
               }
             } else if (transaction.description.startsWith('Transfer from')) {
-              // Find the source account by looking for the matching transfer transaction
               const fromTransaction = transactions.find(t => t.id === transaction.id.replace('-to', ''));
               if (fromTransaction) {
                 const fromAccount = accountMap.get(fromTransaction.accountId);

@@ -5,200 +5,201 @@ import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 import { Transaction } from '../types';
 import { useAccounts } from '@/context/AccountContext';
+import CustomDropdown, { DropdownOption } from './CustomDropdown';
 
 interface AddTransactionFormProps {
-  onAddTransaction: (transaction: Omit<Transaction, 'id'>) => void;
+  onAddTransaction: (transaction: Omit<Transaction, 'id'>) => Promise<void>;
 }
 
+
 const AddTransactionForm = ({ onAddTransaction }: AddTransactionFormProps) => {
-  const { accounts, selectedAccounts } = useAccounts();
+  const { accounts, selectedAccounts, addAccount } = useAccounts();
   const [description, setDescription] = useState('');
   const [amount, setAmount] = useState('');
   const [type, setType] = useState<'income' | 'expense' | 'transfer'>('expense');
   const [date, setDate] = useState<Date | null>(new Date());
-  const [selectedAccountId, setSelectedAccountId] = useState<string>('');
-  const [toAccountId, setToAccountId] = useState<string>('');
+  const [selectedAccount, setSelectedAccount] = useState<DropdownOption | null>(null);
+  const [toAccount, setToAccount] = useState<DropdownOption | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLoadingOptions, setIsLoadingOptions] = useState(false);
+
+  const accountOptions = accounts.map(acc => ({ value: acc.id, label: acc.name }));
 
   useEffect(() => {
     if (selectedAccounts.length === 1) {
-      setSelectedAccountId(selectedAccounts[0].id);
+      setSelectedAccount({ value: selectedAccounts[0].id, label: selectedAccounts[0].name });
     } else {
-      setSelectedAccountId('');
+      setSelectedAccount(null);
     }
-    // Reset toAccountId when the selected account changes to prevent an invalid state
-    setToAccountId('');
-  }, [selectedAccounts]);
+    setToAccount(null);
+  }, [selectedAccounts, accounts]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleCreateAccount = async (inputValue: string) => {
+    setIsLoadingOptions(true);
+    const newAccount = await addAccount({ 
+      name: inputValue, 
+      color: '#CCCCCC', // Default color, maybe allow user to pick this later
+      opening_balance: 0 
+    });
+    setIsLoadingOptions(false);
+    if (newAccount) {
+      const newOption = { value: newAccount.id, label: newAccount.name };
+      return newOption;
+    }
+    return null;
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     const amountValue = parseFloat(amount);
-    if (!description || !amount || isNaN(amountValue) || amountValue <= 0 || !selectedAccountId) {
-      // Basic validation
-      alert('Please fill all fields, including selecting an account.');
+    if (!description || !amount || isNaN(amountValue) || amountValue <= 0 || !selectedAccount) {
+      alert('Please fill all fields, including selecting or creating an account.');
       return;
     }
 
-    if (type === 'transfer' && !toAccountId) {
-      alert('Please select a destination account for the transfer.');
+    if (type === 'transfer' && !toAccount) {
+      alert('Please select or create a destination account for the transfer.');
       return;
     }
 
-    if (type === 'transfer' && selectedAccountId === toAccountId) {
+    if (type === 'transfer' && selectedAccount?.value === toAccount?.value) {
       alert('From and To accounts cannot be the same for a transfer.');
       return;
     }
 
-    onAddTransaction({ 
-      accountId: selectedAccountId, 
-      description, 
-      amount: amountValue, 
-      type, 
-      date: date || new Date(),
-      ...(type === 'transfer' && { toAccountId }),
-    });
+    setIsSubmitting(true);
+    try {
+      await onAddTransaction({ 
+        accountId: selectedAccount.value, 
+        description, 
+        amount: amountValue, 
+        type, 
+        date: (date || new Date()).toISOString(),
+        ...(type === 'transfer' && { toAccountId: toAccount?.value }),
+      });
 
-    // Reset form
-    setDescription('');
-    setAmount('');
-    setType('expense');
-    setDate(new Date());
-    setToAccountId('');
+      // Reset form on successful submission
+      setDescription('');
+      setAmount('');
+      setType('expense');
+      setDate(new Date());
+      // Do not reset selectedAccount if only one is selected in context
+      if (selectedAccounts.length !== 1) {
+        setSelectedAccount(null);
+      }
+      setToAccount(null);
+    } catch (error) {
+      console.error('Failed to add transaction', error);
+      alert('Failed to add transaction. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
+
 
   return (
     <div className="p-4 bg-white dark:bg-dark-bg shadow-md rounded-lg">
       <form onSubmit={handleSubmit} className="space-y-6">
-        <h2 className="text-xl font-semibold text-gray-900 dark:text-dark-text">Add Transaction</h2>
-        
-        {selectedAccounts.length > 1 && (
+        <fieldset disabled={isSubmitting} className="space-y-6">
+          <h2 className="text-xl font-semibold text-gray-900 dark:text-dark-text">Add Transaction</h2>
+          
           <div>
             <label htmlFor="account" className="block text-sm font-medium text-gray-500 dark:text-dark-subtle mb-1">Account</label>
-            <select
+            <CustomDropdown
               id="account"
-              value={selectedAccountId}
-              onChange={(e) => setSelectedAccountId(e.target.value)}
-              className="w-full px-3 py-2 bg-brand-secondary dark:bg-dark-bg border border-gray-300 dark:border-gray-700 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-accent focus:border-brand-accent text-gray-900 dark:text-dark-text"
-              required
-            >
-              <option value="" disabled>Select an account</option>
-              {accounts.map(account => (
-                <option key={account.id} value={account.id}>
-                  {account.name}
-                </option>
-              ))}
-            </select>
+              options={accountOptions}
+              value={selectedAccount}
+              onChange={setSelectedAccount}
+              onCreateOption={handleCreateAccount}
+              placeholder="Select or create an account..."
+              disabled={isLoadingOptions || (selectedAccounts.length === 1 && !!selectedAccount)}
+              loading={isLoadingOptions}
+              clearable
+            />
           </div>
-        )}
 
-        <div>
-          <label htmlFor="description" className="block text-sm font-medium text-gray-500 dark:text-dark-subtle mb-1">Description</label>
-          <input
-            type="text"
-            id="description"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            className="w-full px-3 py-2 bg-brand-secondary dark:bg-dark-bg border border-gray-300 dark:border-gray-700 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-accent focus:border-brand-accent text-gray-900 dark:text-dark-text"
-            placeholder="e.g., Coffee, Salary"
-            required
-          />
-        </div>
-
-        <div>
-          <label htmlFor="amount" className="block text-sm font-medium text-gray-500 dark:text-dark-subtle mb-1">Amount</label>
-          <input
-            type="number"
-            id="amount"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            className="w-full px-3 py-2 bg-brand-secondary dark:bg-dark-bg border border-gray-300 dark:border-gray-700 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-accent focus:border-brand-accent text-gray-900 dark:text-dark-text"
-            placeholder="0.00"
-            required
-          />
-        </div>
-
-        {type === 'transfer' && (
           <div>
-            <label htmlFor="toAccount" className="block text-sm font-medium text-gray-500 dark:text-dark-subtle mb-1">To Account</label>
-            <select
-              id="toAccount"
-              value={toAccountId}
-              onChange={(e) => setToAccountId(e.target.value)}
-              className="w-full px-3 py-2 bg-brand-secondary dark:bg-dark-bg border border-gray-300 dark:border-gray-700 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-accent focus:border-brand-accent text-gray-900 dark:text-dark-text"
+            <label htmlFor="description" className="block text-sm font-medium text-gray-500 dark:text-dark-subtle mb-1">Description</label>
+            <input
+              type="text"
+              id="description"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              className="w-full px-3 py-2 bg-brand-secondary dark:bg-dark-bg border border-gray-300 dark:border-gray-700 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-accent focus:border-brand-accent text-gray-900 dark:text-dark-text disabled:opacity-50"
               required
-            >
-              <option value="" disabled>Select destination account</option>
-              {accounts
-                .filter(account => account.id !== selectedAccountId)
-                .map(account => (
-                  <option key={account.id} value={account.id}>
-                    {account.name}
-                  </option>
+            />
+          </div>
+
+          <div>
+            <label htmlFor="amount" className="block text-sm font-medium text-gray-500 dark:text-dark-subtle mb-1">Amount</label>
+            <input
+              type="number"
+              id="amount"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              className="w-full px-3 py-2 bg-brand-secondary dark:bg-dark-bg border border-gray-300 dark:border-gray-700 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-accent focus:border-brand-accent text-gray-900 dark:text-dark-text disabled:opacity-50"
+              required
+              step="0.01"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-500 dark:text-dark-subtle mb-1">Type</label>
+            <div className="flex items-center space-x-4">
+              {(['expense', 'income', 'transfer'] as const).map(t => (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => setType(t)}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 ${
+                    type === t
+                      ? 'bg-brand-accent text-white'
+                      : 'bg-brand-secondary dark:bg-dark-hover text-gray-700 dark:text-dark-text hover:bg-gray-200 dark:hover:bg-gray-600'
+                  }`}
+                >
+                  {t.charAt(0).toUpperCase() + t.slice(1)}
+                </button>
               ))}
-            </select>
+            </div>
           </div>
-        )}
 
-        <div>
-          <label htmlFor="date" className="block text-sm font-medium text-gray-500 dark:text-dark-subtle mb-1">Date & Time</label>
-          <DatePicker
-            selected={date}
-            onChange={(date: Date | null) => setDate(date)}
-            showTimeSelect
-            timeFormat="HH:mm"
-            timeIntervals={15}
-            dateFormat="MMMM d, yyyy h:mm aa"
-            className="w-full px-3 py-2 bg-brand-secondary dark:bg-dark-bg border border-gray-300 dark:border-gray-700 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-accent focus:border-brand-accent text-gray-900 dark:text-dark-text"
-            placeholderText="Select date and time"
-            isClearable
-          />
-        </div>
+          {type === 'transfer' && (
+            <div>
+              <label htmlFor="toAccount" className="block text-sm font-medium text-gray-500 dark:text-dark-subtle mb-1">To Account</label>
+              <CustomDropdown
+                id="toAccount"
+                options={accountOptions.filter(opt => opt.value !== selectedAccount?.value)}
+                value={toAccount}
+                onChange={setToAccount}
+                onCreateOption={handleCreateAccount}
+                placeholder="Select or create destination..."
+                disabled={isLoadingOptions}
+                loading={isLoadingOptions}
+                clearable
+              />
+            </div>
+          )}
 
-        <div>
-          <span className="block text-sm font-medium text-gray-500 dark:text-dark-subtle mb-2">Type</span>
-          <div className="grid grid-cols-3 gap-2 rounded-lg bg-gray-200 dark:bg-dark-bg p-1">
+          <div>
+            <label htmlFor="date" className="block text-sm font-medium text-gray-500 dark:text-dark-subtle mb-1">Date</label>
+            <DatePicker
+              id="date"
+              selected={date}
+              onChange={(d) => setDate(d)}
+              className="w-full px-3 py-2 bg-brand-secondary dark:bg-dark-bg border border-gray-300 dark:border-gray-700 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-accent focus:border-brand-accent text-gray-900 dark:text-dark-text disabled:opacity-50"
+            />
+          </div>
+
+          <div className="flex justify-end pt-2">
             <button
-              type="button"
-              onClick={() => setType('expense')}
-              className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
-                type === 'expense' 
-                  ? 'bg-white dark:bg-dark-card text-gray-900 dark:text-dark-text shadow'
-                  : 'bg-transparent text-gray-600 dark:text-dark-subtle hover:bg-gray-100 dark:hover:bg-gray-800'
-              }`}
+              type="submit"
+              className="w-full px-4 py-2 bg-brand-accent text-white font-semibold rounded-lg shadow-md hover:bg-brand-accent-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-accent disabled:opacity-50 transition-colors"
             >
-              Expense
-            </button>
-            <button
-              type="button"
-              onClick={() => setType('income')}
-              className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
-                type === 'income' 
-                  ? 'bg-white dark:bg-dark-card text-gray-900 dark:text-dark-text shadow'
-                  : 'bg-transparent text-gray-600 dark:text-dark-subtle hover:bg-gray-100 dark:hover:bg-gray-800'
-              }`}
-            >
-              Income
-            </button>
-            <button
-              type="button"
-              onClick={() => setType('transfer')}
-              className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
-                type === 'transfer'
-                  ? 'bg-white dark:bg-dark-card text-gray-900 dark:text-dark-text shadow'
-                  : 'bg-transparent text-gray-600 dark:text-dark-subtle hover:bg-gray-100 dark:hover:bg-gray-800'
-              }`}
-            >
-              Transfer
+              {isSubmitting ? 'Adding...' : 'Add Transaction'}
             </button>
           </div>
-        </div>
-
-        <button
-          type="submit"
-          className="w-full bg-brand-accent text-white font-semibold py-3 px-4 rounded-lg hover:bg-brand-accent/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-white dark:focus:ring-offset-dark-card focus:ring-brand-accent transition-all duration-200 shadow-sm"
-        >
-          Add Transaction
-        </button>
+        </fieldset>
       </form>
     </div>
   );

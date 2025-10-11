@@ -19,7 +19,7 @@ const Summary = ({ transactions }: SummaryProps) => {
     .filter((t) => t.type === 'expense')
     .reduce((acc, t) => acc + t.amount, 0);
 
-  const openingBalance = selectedAccounts.reduce((acc, account) => acc + account.openingBalance, 0);
+  const openingBalance = selectedAccounts.reduce((acc, account) => acc + account.opening_balance, 0);
   const balance = openingBalance + income - expenses;
 
   return (

@@ -2,7 +2,7 @@ export interface Account {
   id: string;
   name: string;
   color: string;
-  openingBalance: number;
+  opening_balance: number;
 }
 
 export interface Transaction {
@@ -11,6 +11,6 @@ export interface Transaction {
   description: string;
   amount: number;
   type: 'income' | 'expense' | 'transfer';
-  date?: Date;
+  date?: string; // ISO string format for database compatibility
   toAccountId?: string;
 }
