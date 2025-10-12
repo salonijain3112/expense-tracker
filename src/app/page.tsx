@@ -41,7 +41,7 @@ export default function Home() {
       console.error('Import failed:', error);
       
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-      const errorCode = error && typeof error === 'object' && 'code' in error ? (error as any).code : undefined;
+      const errorCode = error && typeof error === 'object' && 'code' in error ? (error as { code: string }).code : undefined;
       
       if (errorMessage?.includes('Failed to fetch') || errorCode === '') {
         alert('Import failed due to network connectivity issues. Please check your internet connection and try again.');

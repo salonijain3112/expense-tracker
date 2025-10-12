@@ -7,6 +7,20 @@ import { Transaction } from '@/types';
 import { extractImportedRows } from '@/utils/importers';
 import { useAccounts } from '@/context/AccountContext';
 
+// Type definitions for imported data
+interface ImportedDataRow {
+  [key: string]: string | number | undefined;
+}
+
+interface ParsedCSVResult {
+  data: ImportedDataRow[];
+  meta?: {
+    fields?: string[];
+  };
+}
+
+type ExcelRowArray = Array<string | number | undefined>;
+
 interface DataImportExportProps {
   transactions: Transaction[];
   onImport: (importedTransactions: Transaction[]) => void;
@@ -36,7 +50,7 @@ const DataImportExport = ({ transactions, onImport }: DataImportExportProps) => 
     XLSX.writeFile(workbook, "transactions.xlsx");
   };
 
-  const processImportedData = async (rows: any[]): Promise<boolean> => {
+  const processImportedData = async (rows: ImportedDataRow[]): Promise<boolean> => {
     try {
       const extracted = extractImportedRows(rows);
       const nameToId = new Map<string, string>(accounts.map(a => [a.name.trim().toLowerCase(), a.id]));
@@ -116,11 +130,11 @@ const DataImportExport = ({ transactions, onImport }: DataImportExportProps) => 
     const reader = new FileReader();
 
     if (file.name.endsWith('.csv')) {
-      Papa.parse<any>(file, {
+      Papa.parse<ImportedDataRow>(file, {
         header: true,
         skipEmptyLines: true,
         complete: async (results) => {
-          const ok = await processImportedData(results.data as any[]);
+          const ok = await processImportedData((results as ParsedCSVResult).data);
           if (!ok) {
             console.debug('[Import][CSV] Headers:', results.meta?.fields);
             alert('No valid transactions found in the CSV. Please check the headers and data.');
@@ -138,21 +152,21 @@ const DataImportExport = ({ transactions, onImport }: DataImportExportProps) => 
           const workbook = XLSX.read(data, { type: 'array' });
           const sheetName = workbook.SheetNames[0];
           const worksheet = workbook.Sheets[sheetName];
-          const rowsArr = XLSX.utils.sheet_to_json<any[]>(worksheet, { header: 1, raw: false });
+          const rowsArr = XLSX.utils.sheet_to_json<ExcelRowArray>(worksheet, { header: 1, raw: false });
           console.debug('[Import] Rows(header=1) len=', rowsArr.length, 'firstHeaderRow=', rowsArr[0]);
           if (rowsArr.length >= 2) {
-            const headerRow = (rowsArr[0] as any[]).map(h => String(h || '').trim().toLowerCase());
+            const headerRow = (rowsArr[0] as ExcelRowArray).map(h => String(h || '').trim().toLowerCase());
             const objects = rowsArr.slice(1)
               .filter(r => Array.isArray(r))
-              .map((rArr: any[]) => {
-                const obj: Record<string, any> = {};
+              .map((rArr: ExcelRowArray) => {
+                const obj: ImportedDataRow = {};
                 headerRow.forEach((key, idx) => {
                   obj[key] = rArr[idx];
                 });
                 return obj;
               });
             console.debug('[Import] Objects len=', objects.length, 'sample=', objects[0]);
-            const ok = await processImportedData(objects as any[]);
+            const ok = await processImportedData(objects);
             if (!ok) {
               alert('No valid transactions found in the Excel file. Please check the headers and data.');
             }

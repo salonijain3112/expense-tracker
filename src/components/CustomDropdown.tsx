@@ -241,7 +241,7 @@ const CustomDropdown = ({
                       onClick={handleCreateOption}
                     >
                       <PlusIcon className="h-4 w-4" />
-                      <span>Create "{searchTerm}"</span>
+                      <span>Create &quot;{searchTerm}&quot;</span>
                     </div>
                   )}
                 </>
