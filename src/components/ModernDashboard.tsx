@@ -1,8 +1,10 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Transaction } from '@/types';
 import { useAccounts } from '@/context/AccountContext';
 import { useCurrency } from '@/context/CurrencyContext';
 import AccountCard from './AccountCard';
+import { AddAccountForm } from './AddAccountForm';
+import { ManageAccountsModal } from './ManageAccountsModal';
 
 interface ModernDashboardProps {
   transactions: Transaction[];
@@ -20,6 +22,8 @@ const ModernDashboard: React.FC<ModernDashboardProps> = ({
   const { accounts } = useAccounts();
   const { currency } = useCurrency();
   const currencySymbol = currency === 'INR' ? '₹' : '$';
+  const [isAddingAccount, setIsAddingAccount] = useState(false);
+  const [isManagingAccounts, setIsManagingAccounts] = useState(false);
 
   // Calculate account balances
   const accountBalances = useMemo(() => {
@@ -76,12 +80,30 @@ const ModernDashboard: React.FC<ModernDashboardProps> = ({
   const colors = ['#10b981', '#ef4444', '#f59e0b', '#3b82f6', '#8b5cf6'];
 
   return (
-    <div className="space-y-6 pb-6">
+    <div className="space-y-6 pb-6 w-full px-4">
       {/* List of accounts */}
-      <div className="bg-white rounded-2xl p-4 shadow-sm">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">List of accounts</h2>
-        <div className="grid grid-cols-2 gap-3">
-          {accounts.map((account, index) => (
+      <div className="bg-white rounded-2xl p-4 shadow-sm w-full">
+        <div className="flex items-center justify-between mb-4 gap-3">
+          <h2 className="text-lg font-semibold text-gray-900">List of accounts</h2>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setIsManagingAccounts(true)}
+              className="px-3 py-1.5 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
+            >
+              Manage
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsAddingAccount(true)}
+              className="px-3 py-1.5 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700"
+            >
+              + Add
+            </button>
+          </div>
+        </div>
+        <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+          {accounts.map(account => (
             <AccountCard
               key={account.id}
               account={account}
@@ -94,7 +116,7 @@ const ModernDashboard: React.FC<ModernDashboardProps> = ({
       </div>
 
       {/* Expense structure */}
-      <div className="bg-white rounded-2xl p-4 shadow-sm">
+      <div className="bg-white rounded-2xl p-4 shadow-sm w-full">
         <h2 className="text-lg font-semibold text-gray-900 mb-2">Expense structure</h2>
         <p className="text-sm text-gray-500 mb-2">LAST 30 DAYS</p>
         <p className="text-2xl font-bold text-gray-900 mb-6">
@@ -205,6 +227,8 @@ const ModernDashboard: React.FC<ModernDashboardProps> = ({
           </svg>
         </button>
       </div>
+      {isAddingAccount && <AddAccountForm onClose={() => setIsAddingAccount(false)} />}
+      {isManagingAccounts && <ManageAccountsModal onClose={() => setIsManagingAccounts(false)} />}
     </div>
   );
 };

@@ -1,11 +1,12 @@
 "use client";
 
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
 import { Transaction } from '@/types';
 import { extractImportedRows } from '@/utils/importers';
 import { useAccounts } from '@/context/AccountContext';
+import { validateOpeningBalanceInput, formatOpeningBalanceForDisplay } from '@/utils/accountValidation';
 
 // Type definitions for imported data
 interface ImportedDataRow {
@@ -29,6 +30,7 @@ interface DataImportExportProps {
 const DataImportExport = ({ transactions, onImport }: DataImportExportProps) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { accounts, selectedAccounts, addAccount } = useAccounts();
+  const [importSummary, setImportSummary] = useState<{ warnings: string[]; info: string[] }>({ warnings: [], info: [] });
 
   const handleExportCSV = () => {
     const csv = Papa.unparse(transactions);
@@ -51,17 +53,35 @@ const DataImportExport = ({ transactions, onImport }: DataImportExportProps) => 
   };
 
   const processImportedData = async (rows: ImportedDataRow[]): Promise<boolean> => {
+    const warnings: string[] = [];
+    const info: string[] = [];
+
     try {
       const extracted = extractImportedRows(rows);
+      if (extracted.length === 0) {
+        warnings.push('No valid transactions found in the file.');
+        setImportSummary({ warnings, info });
+        return false;
+      }
+
       const nameToId = new Map<string, string>(accounts.map(a => [a.name.trim().toLowerCase(), a.id]));
       const defaultAccountId = accounts.length > 0
         ? (selectedAccounts.length === 1 ? selectedAccounts[0].id : (accounts[0]?.id || ''))
         : '';
 
       const uniqueAccountNames = new Set<string>();
-      extracted.forEach(({ accountName }) => {
+      const openingBalanceByAccount = new Map<string, number>();
+
+      extracted.forEach(({ accountName, openingBalance }) => {
         if (accountName && accountName.trim() !== '') {
-          uniqueAccountNames.add(accountName.trim());
+          const trimmed = accountName.trim();
+          uniqueAccountNames.add(trimmed);
+          if (typeof openingBalance === 'number') {
+            const key = trimmed.toLowerCase();
+            if (!openingBalanceByAccount.has(key)) {
+              openingBalanceByAccount.set(key, Number(openingBalance.toFixed(2)));
+            }
+          }
         }
       });
 
@@ -75,22 +95,50 @@ const DataImportExport = ({ transactions, onImport }: DataImportExportProps) => 
         if (!existing) {
           const color = palette[colorIdx % palette.length];
           colorIdx += 1;
-          
+          let openingBalance = openingBalanceByAccount.get(key);
+
+          if (typeof openingBalance === 'number') {
+            info.push(`Using imported opening balance ${formatOpeningBalanceForDisplay(openingBalance)} for "${accountName}".`);
+          } else {
+            let chosenValue = 0;
+            if (typeof window !== 'undefined') {
+              const response = window.prompt(
+                `Opening balance for "${accountName}"? (use negative numbers for liabilities)`,
+                '0.00'
+              );
+              if (response && response.trim()) {
+                const validation = validateOpeningBalanceInput(response);
+                if (validation.isValid && typeof validation.value === 'number') {
+                  chosenValue = validation.value;
+                  info.push(`Opening balance for "${accountName}" set to ${formatOpeningBalanceForDisplay(chosenValue)} via prompt.`);
+                } else {
+                  warnings.push(`Invalid opening balance provided for "${accountName}". Defaulted to 0.00.`);
+                }
+              } else {
+                warnings.push(`No opening balance provided for "${accountName}". Defaulted to 0.00.`);
+              }
+            } else {
+              warnings.push(`Unable to prompt for "${accountName}" opening balance. Defaulted to 0.00.`);
+            }
+            openingBalance = chosenValue;
+          }
+
           try {
             const created = await addAccount({ 
               name: accountName, 
               color, 
-              opening_balance: 0 
+              opening_balance: openingBalance ?? 0 
             });
             
             if (created) {
               nameToId.set(key, created.id);
-              console.log(`Created new account: "${accountName}" with ID: ${created.id}`);
+              info.push(`Created account "${accountName}" with opening balance ${formatOpeningBalanceForDisplay(openingBalance ?? 0)}.`);
             } else {
-              console.warn(`Failed to create account "${accountName}", will use default account`);
+              warnings.push(`Failed to create account "${accountName}". Transactions will fall back to the default account.`);
             }
           } catch (error) {
             console.error(`Failed to create account "${accountName}":`, error);
+            warnings.push(`Could not create account "${accountName}". Transactions assigned to default account.`);
           }
         }
       }
@@ -113,12 +161,18 @@ const DataImportExport = ({ transactions, onImport }: DataImportExportProps) => 
       });
       
       if (newTransactions.length === 0) {
+        warnings.push('No transactions were created from this file.');
+        setImportSummary({ warnings, info });
         return false;
       }
+
       onImport(newTransactions);
+      setImportSummary({ warnings, info });
       return true;
     } catch (e) {
       console.error('Normalization failed:', e);
+      warnings.push('Failed to normalize the file. Please check the format and try again.');
+      setImportSummary({ warnings, info });
       return false;
     }
   };
@@ -244,6 +298,32 @@ const DataImportExport = ({ transactions, onImport }: DataImportExportProps) => 
           </button>
         </div>
       </div>
+
+      {(importSummary.info.length > 0 || importSummary.warnings.length > 0) && (
+        <div className="pt-4 space-y-3">
+          {importSummary.info.length > 0 && (
+            <div className="p-3 rounded-md bg-green-50 text-sm text-green-800 dark:bg-green-900/30 dark:text-green-200">
+              <p className="font-semibold mb-1">Import info</p>
+              <ul className="list-disc pl-5 space-y-1">
+                {importSummary.info.map((message, index) => (
+                  <li key={`info-${index}`}>{message}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {importSummary.warnings.length > 0 && (
+            <div className="p-3 rounded-md bg-yellow-50 text-sm text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-100">
+              <p className="font-semibold mb-1">Import warnings</p>
+              <ul className="list-disc pl-5 space-y-1">
+                {importSummary.warnings.map((message, index) => (
+                  <li key={`warning-${index}`}>{message}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 };

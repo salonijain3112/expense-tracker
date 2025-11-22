@@ -1,16 +1,21 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Transaction } from '@/types';
 import { useAccounts } from '@/context/AccountContext';
 import { useCurrency } from '@/context/CurrencyContext';
 
 interface ReportsProps {
   transactions: Transaction[];
+  initialAccountId?: string;
 }
 
-const Reports: React.FC<ReportsProps> = ({ transactions }) => {
+const Reports: React.FC<ReportsProps> = ({ transactions, initialAccountId }) => {
   const { accounts } = useAccounts();
   const { currency } = useCurrency();
-  const [selectedAccountId, setSelectedAccountId] = useState<string>('all');
+  const [selectedAccountId, setSelectedAccountId] = useState<string>(initialAccountId ?? 'all');
+
+  useEffect(() => {
+    setSelectedAccountId(initialAccountId ?? 'all');
+  }, [initialAccountId]);
   
   const currencySymbol = currency === 'INR' ? '₹' : '$';
   const accountMap = new Map(accounts.map(acc => [acc.id, acc]));

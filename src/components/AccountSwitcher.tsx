@@ -3,10 +3,12 @@
 import React, { useState } from 'react';
 import { useAccounts } from '@/context/AccountContext';
 import { AddAccountForm } from './AddAccountForm';
+import { ManageAccountsModal } from './ManageAccountsModal';
 
 export const AccountSwitcher = () => {
   const { accounts, selectedAccounts, setSelectedAccountIds } = useAccounts();
   const [isAddingAccount, setIsAddingAccount] = useState(false);
+  const [isManagingAccounts, setIsManagingAccounts] = useState(false);
 
   const handleAccountClick = (accountId: string) => {
     setSelectedAccountIds([accountId]);
@@ -41,7 +43,7 @@ export const AccountSwitcher = () => {
         })}
       </div>
 
-      <div className="flex items-center justify-between mt-2 px-4">
+      <div className="flex items-center justify-between mt-2 px-4 gap-2">
         <button
           onClick={handleSelectAll}
           disabled={areAllSelected}
@@ -50,12 +52,20 @@ export const AccountSwitcher = () => {
           Select All
         </button>
 
-        <button
-          onClick={() => setIsAddingAccount(true)}
-          className="px-4 py-2 rounded-md text-sm font-medium bg-indigo-600 text-white hover:bg-indigo-700 transition-colors"
-        >
-          + Add Account
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setIsManagingAccounts(true)}
+            className="px-4 py-2 rounded-md text-sm font-medium bg-gray-200 text-gray-800 hover:bg-gray-300 dark:bg-dark-hover dark:text-dark-text"
+          >
+            Manage Accounts
+          </button>
+          <button
+            onClick={() => setIsAddingAccount(true)}
+            className="px-4 py-2 rounded-md text-sm font-medium bg-indigo-600 text-white hover:bg-indigo-700 transition-colors"
+          >
+            + Add Account
+          </button>
+        </div>
       </div>
 
       {isAddingAccount && (
@@ -68,6 +78,10 @@ export const AccountSwitcher = () => {
             <AddAccountForm onClose={() => setIsAddingAccount(false)} />
           </div>
         </div>
+      )}
+
+      {isManagingAccounts && (
+        <ManageAccountsModal onClose={() => setIsManagingAccounts(false)} />
       )}
     </div>
   );

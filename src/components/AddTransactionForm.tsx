@@ -6,6 +6,7 @@ import 'react-datepicker/dist/react-datepicker.css';
 import { Transaction } from '../types';
 import { useAccounts } from '@/context/AccountContext';
 import CustomDropdown, { DropdownOption } from './CustomDropdown';
+import { validateOpeningBalanceInput, formatOpeningBalanceForDisplay } from '@/utils/accountValidation';
 
 interface AddTransactionFormProps {
   onAddTransaction: (transaction: Omit<Transaction, 'id'>) => Promise<void>;
@@ -22,6 +23,12 @@ const AddTransactionForm = ({ onAddTransaction }: AddTransactionFormProps) => {
   const [toAccount, setToAccount] = useState<DropdownOption | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoadingOptions, setIsLoadingOptions] = useState(false);
+  const [pendingAccount, setPendingAccount] = useState<{
+    name: string;
+    resolve: (option: DropdownOption | null) => void;
+  } | null>(null);
+  const [pendingOpeningBalance, setPendingOpeningBalance] = useState('0.00');
+  const [pendingError, setPendingError] = useState<string | null>(null);
 
   const accountOptions = accounts.map(acc => ({ value: acc.id, label: acc.name }));
 
@@ -34,19 +41,54 @@ const AddTransactionForm = ({ onAddTransaction }: AddTransactionFormProps) => {
     setToAccount(null);
   }, [selectedAccounts, accounts]);
 
-  const handleCreateAccount = async (inputValue: string) => {
-    setIsLoadingOptions(true);
-    const newAccount = await addAccount({ 
-      name: inputValue, 
-      color: '#CCCCCC', // Default color, maybe allow user to pick this later
-      opening_balance: 0 
+  const handleCreateAccount = (inputValue: string) => {
+    return new Promise<DropdownOption | null>((resolve) => {
+      setPendingOpeningBalance('0.00');
+      setPendingError(null);
+      setPendingAccount({ name: inputValue, resolve });
     });
-    setIsLoadingOptions(false);
-    if (newAccount) {
-      const newOption = { value: newAccount.id, label: newAccount.name };
-      return newOption;
+  };
+
+  const closePendingAccountModal = () => {
+    if (pendingAccount) {
+      pendingAccount.resolve(null);
     }
-    return null;
+    setPendingAccount(null);
+    setPendingError(null);
+  };
+
+  const submitPendingAccount = async () => {
+    if (!pendingAccount) return;
+    setPendingError(null);
+    const validation = validateOpeningBalanceInput(pendingOpeningBalance);
+    if (!validation.isValid || typeof validation.value !== 'number') {
+      setPendingError(validation.error || 'Enter a valid opening balance');
+      return;
+    }
+
+    setIsLoadingOptions(true);
+    try {
+      const newAccount = await addAccount({
+        name: pendingAccount.name,
+        color: '#CCCCCC',
+        opening_balance: validation.value,
+      });
+      const newOption = { value: newAccount.id, label: newAccount.name };
+      pendingAccount.resolve(newOption);
+      setPendingAccount(null);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to create account';
+      setPendingError(message);
+    } finally {
+      setIsLoadingOptions(false);
+    }
+  };
+
+  const handlePendingBalanceBlur = () => {
+    const validation = validateOpeningBalanceInput(pendingOpeningBalance);
+    if (validation.isValid && typeof validation.value === 'number') {
+      setPendingOpeningBalance(formatOpeningBalanceForDisplay(validation.value));
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -201,6 +243,56 @@ const AddTransactionForm = ({ onAddTransaction }: AddTransactionFormProps) => {
           </div>
         </fieldset>
       </form>
+      {pendingAccount && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="bg-white dark:bg-dark-secondary rounded-lg shadow-xl w-full max-w-md p-6">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-dark-text">
+              Opening Balance
+            </h3>
+            <p className="text-sm text-gray-500 dark:text-dark-subtle mt-1">
+              Set the starting balance for <span className="font-medium">{pendingAccount.name}</span>.
+            </p>
+            <div className="mt-4">
+              <label htmlFor="pendingBalance" className="block text-sm font-medium text-gray-700 dark:text-dark-text">
+                Opening Balance
+              </label>
+              <input
+                id="pendingBalance"
+                type="text"
+                inputMode="decimal"
+                value={pendingOpeningBalance}
+                onChange={(e) => {
+                  setPendingOpeningBalance(e.target.value);
+                  setPendingError(null);
+                }}
+                onBlur={handlePendingBalanceBlur}
+                className={`mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none sm:text-sm dark:bg-dark-hover dark:border-gray-600 dark:text-white ${pendingError ? 'border-red-500 focus:ring-red-500 focus:border-red-500' : 'border-gray-300 focus:ring-indigo-500 focus:border-indigo-500'}`}
+                placeholder="0.00"
+              />
+              {pendingError && (
+                <p className="mt-2 text-sm text-red-600">{pendingError}</p>
+              )}
+            </div>
+            <div className="mt-6 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={closePendingAccountModal}
+                className="px-4 py-2 rounded-md text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-dark-hover dark:text-dark-text"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={submitPendingAccount}
+                className="px-4 py-2 rounded-md text-sm font-medium bg-brand-accent text-white hover:bg-brand-accent-dark disabled:opacity-50"
+                disabled={isLoadingOptions}
+              >
+                {isLoadingOptions ? 'Saving...' : 'Save'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

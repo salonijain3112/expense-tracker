@@ -2,11 +2,6 @@
 
 import { useMemo, useState } from 'react';
 import Header from '@/components/Header';
-import Summary from '@/components/Summary';
-import TransactionList from '@/components/TransactionList';
-import AddTransactionForm from '@/components/AddTransactionForm';
-import DataImportExport from '@/components/DataImportExport';
-import { AccountSwitcher } from '@/components/AccountSwitcher';
 import AuthWrapper from '@/components/Auth';
 import TabNavigation, { TabKey } from '@/components/TabNavigation';
 import Reports from '@/components/Reports';
@@ -20,6 +15,7 @@ export default function Home() {
   const { accounts, selectedAccounts, setSelectedAccountIds } = useAccounts();
   const { transactions, addTransaction, bulkAddTransactions } = useTransactions();
   const [activeTab, setActiveTab] = useState<TabKey>('dashboard');
+  const [reportFocusAccountId, setReportFocusAccountId] = useState<string | undefined>(undefined);
 
   const handleAddTransaction = async (transaction: Omit<Transaction, 'id'>) => {
     await addTransaction(transaction);
@@ -60,29 +56,30 @@ export default function Home() {
   }, [transactions, selectedAccounts]);
 
   const handleAccountSelect = (accountId: string) => {
-    // Toggle account selection
     const account = accounts.find(acc => acc.id === accountId);
     if (!account) return;
-    
-    const isSelected = selectedAccounts.some(acc => acc.id === accountId);
-    const currentSelectedIds = selectedAccounts.map(acc => acc.id);
-    
-    if (isSelected) {
-      // Deselect the account
-      const newSelectedIds = currentSelectedIds.filter(id => id !== accountId);
-      setSelectedAccountIds(newSelectedIds);
-    } else {
-      // Select the account
-      const newSelectedIds = [...currentSelectedIds, accountId];
-      setSelectedAccountIds(newSelectedIds);
-    }
+
+    setSelectedAccountIds([accountId]);
+    setReportFocusAccountId(accountId);
+    setActiveTab('reports');
   };
 
   const handleFloatingActionClick = () => {
     setActiveTab('actions');
   };
 
-  const renderMobileContent = () => {
+  const handleTabChange = (tab: TabKey) => {
+    if (tab !== 'reports') {
+      setReportFocusAccountId(undefined);
+    } else {
+      // If user manually navigates to reports, default to all accounts
+      setReportFocusAccountId(undefined);
+      setSelectedAccountIds(accounts.map(acc => acc.id));
+    }
+    setActiveTab(tab);
+  };
+
+  const renderActiveTabContent = () => {
     switch (activeTab) {
       case 'dashboard':
         return (
@@ -94,7 +91,12 @@ export default function Home() {
           />
         );
       case 'reports':
-        return <Reports transactions={filteredTransactions} />;
+        return (
+          <Reports 
+            transactions={filteredTransactions}
+            initialAccountId={reportFocusAccountId}
+          />
+        );
       case 'actions':
         return (
           <Actions
@@ -114,43 +116,13 @@ export default function Home() {
         <Header />
 
         <main className="px-4 py-6">
-          <div className="space-y-8">
-
-            {/* Desktop Layout - Hidden on mobile and tablet */}
-            <div className="hidden md:block">
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                <div className="lg:col-span-2 space-y-8">
-                  <Summary transactions={filteredTransactions} />
-                  <TransactionList transactions={filteredTransactions} />
-                </div>
-
-                <div className="space-y-8">
-                  {accounts.length > 0 && (
-                  <div className="card">
-                    <AddTransactionForm onAddTransaction={handleAddTransaction} />
-                  </div>
-                  )}
-                  <div className="card">
-                    <DataImportExport transactions={filteredTransactions} onImport={handleImportTransactions} />
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Mobile/Tablet Layout - Hidden on desktop */}
-            <div className="md:hidden pb-20">
-              {renderMobileContent()}
-            </div>
-            
-            {/* Show AccountSwitcher only on desktop for now */}
-            <div className="hidden md:block">
-              <AccountSwitcher />
-            </div>
+          <div className="space-y-8 w-full pb-24">
+            {renderActiveTabContent()}
           </div>
         </main>
 
         {/* Mobile Tab Navigation */}
-        <TabNavigation activeTab={activeTab} onTabChange={setActiveTab} />
+        <TabNavigation activeTab={activeTab} onTabChange={handleTabChange} />
       </div>
     </AuthWrapper>
   );

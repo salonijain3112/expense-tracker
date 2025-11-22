@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { useAccounts } from '@/context/AccountContext';
 import { CirclePicker, ColorResult } from 'react-color';
+import { validateOpeningBalanceInput, formatOpeningBalanceForDisplay } from '@/utils/accountValidation';
 
 interface AddAccountFormProps {
   onClose: () => void;
@@ -11,24 +12,44 @@ interface AddAccountFormProps {
 export const AddAccountForm = ({ onClose }: AddAccountFormProps) => {
   const { addAccount } = useAccounts();
   const [name, setName] = useState('');
-  const [opening_balance, setOpening_balance] = useState('0');
+  const [opening_balance, setOpening_balance] = useState('0.00');
   const [color, setColor] = useState('#FF5733'); // Default color
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errors, setErrors] = useState<{ name?: string; opening_balance?: string; form?: string }>({});
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSubmitting) return;
 
     setIsSubmitting(true);
+    const nextErrors: typeof errors = {};
+    if (!name.trim()) {
+      nextErrors.name = 'Account name is required';
+    }
+
+    const balanceValidation = validateOpeningBalanceInput(opening_balance);
+    if (!balanceValidation.isValid) {
+      nextErrors.opening_balance = balanceValidation.error;
+    }
+
+    if (Object.keys(nextErrors).length > 0) {
+      setErrors(nextErrors);
+      setIsSubmitting(false);
+      return;
+    }
+
+    setErrors({});
+
     try {
       await addAccount({
-        name,
-        opening_balance: parseFloat(opening_balance) || 0,
+        name: name.trim(),
+        opening_balance: balanceValidation.value ?? 0,
         color,
       });
       onClose();
     } catch (error) {
-      console.error('Failed to add account', error);
+      const message = error instanceof Error ? error.message : 'Failed to add account';
+      setErrors({ form: message });
     } finally {
       setIsSubmitting(false);
     }
@@ -36,6 +57,14 @@ export const AddAccountForm = ({ onClose }: AddAccountFormProps) => {
 
   const handleColorChange = (color: ColorResult) => {
     setColor(color.hex);
+    setErrors(prev => ({ ...prev, form: undefined }));
+  };
+
+  const handleOpeningBalanceBlur = () => {
+    const validation = validateOpeningBalanceInput(opening_balance);
+    if (validation.isValid && typeof validation.value === 'number') {
+      setOpening_balance(formatOpeningBalanceForDisplay(validation.value));
+    }
   };
 
   return (
@@ -50,21 +79,31 @@ export const AddAccountForm = ({ onClose }: AddAccountFormProps) => {
                 type="text"
                 id="name"
                 value={name}
-                onChange={(e) => setName(e.target.value)}
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm dark:bg-dark-hover dark:border-gray-600 dark:placeholder-gray-400 dark:text-white disabled:opacity-50"
+                onChange={(e) => {
+                  setName(e.target.value);
+                  setErrors(prev => ({ ...prev, name: undefined, form: undefined }));
+                }}
+                className={`mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm dark:bg-dark-hover dark:border-gray-600 dark:placeholder-gray-400 dark:text-white disabled:opacity-50 ${errors.name ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : 'border-gray-300'}`}
                 required
               />
+              {errors.name && <p className="mt-1 text-sm text-red-600">{errors.name}</p>}
             </div>
             <div>
               <label htmlFor="opening_balance" className="block text-sm font-medium text-gray-700 dark:text-dark-text">Opening Balance</label>
               <input
-                type="number"
+                type="text"
                 id="opening_balance"
                 value={opening_balance}
-                onChange={(e) => setOpening_balance(e.target.value)}
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm dark:bg-dark-hover dark:border-gray-600 dark:placeholder-gray-400 dark:text-white disabled:opacity-50"
+                onChange={(e) => {
+                  setOpening_balance(e.target.value);
+                  setErrors(prev => ({ ...prev, opening_balance: undefined, form: undefined }));
+                }}
+                onBlur={handleOpeningBalanceBlur}
+                inputMode="decimal"
+                className={`mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm dark:bg-dark-hover dark:border-gray-600 dark:placeholder-gray-400 dark:text-white disabled:opacity-50 ${errors.opening_balance ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : 'border-gray-300'}`}
                 placeholder="0"
               />
+              {errors.opening_balance && <p className="mt-1 text-sm text-red-600">{errors.opening_balance}</p>}
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-dark-text mb-2">Account Color</label>
@@ -76,6 +115,7 @@ export const AddAccountForm = ({ onClose }: AddAccountFormProps) => {
                 {isSubmitting ? 'Adding...' : 'Add Account'}
               </button>
             </div>
+            {errors.form && <p className="mt-2 text-sm text-red-600">{errors.form}</p>}
           </fieldset>
         </form>
       </div>

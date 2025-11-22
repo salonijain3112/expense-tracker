@@ -1,5 +1,11 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## Account Balances
+
+- Every account now requires an opening balance during creation. The Add Account modal validates inputs (supports negative numbers and up to two decimals) and surfaces any Supabase errors so you always know why a save failed.
+- Quick-create entry points (transaction dropdowns and file imports) prompt for, or reuse, an opening balance so no new account silently starts at zero. Imports display warnings whenever a default is applied.
+- Existing accounts can be updated from the **Manage Accounts** action in the account switcher, letting you edit the name, color, and opening balance while keeping dashboards in sync immediately.
+
 ## Getting Started
 
 First, run the development server:

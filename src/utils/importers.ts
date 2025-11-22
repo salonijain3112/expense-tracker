@@ -109,17 +109,27 @@ export function normalizeImportedRows(rows: RawRow[]): Omit<Transaction, 'id'>[]
   return out;
 }
 
-export function extractImportedRows(rows: RawRow[]): { tx: Omit<Transaction, 'id'>; accountName?: string }[] {
+export function extractImportedRows(rows: RawRow[]): { tx: Omit<Transaction, 'id'>; accountName?: string; openingBalance?: number }[] {
   if (!rows || rows.length === 0) return [];
   const headers = Array.from(new Set(Object.keys(rows[0] || {}).map(h => h.trim())));
   const lowerHeaderMap = new Map(headers.map(h => [h.toLowerCase(), h]));
   const get = (row: RawRow, key: string) => row[lowerHeaderMap.get(key.toLowerCase()) || key];
+  const resolveOpeningBalance = (row: RawRow): number | undefined => {
+    const candidates = ['opening_balance', 'opening balance', 'initial_balance', 'initial balance', 'starting_balance', 'starting balance'];
+    for (const key of candidates) {
+      const parsed = parseAmount(get(row, key));
+      if (parsed != null) {
+        return Number(parsed.toFixed(2));
+      }
+    }
+    return undefined;
+  };
 
   let mode: 'report' | 'generic' = 'generic';
   if (looksLikeReportSchema(headers)) mode = 'report';
   else if (looksLikeGenericSchema(headers)) mode = 'generic';
 
-  const out: { tx: Omit<Transaction, 'id'>; accountName?: string }[] = [];
+  const out: { tx: Omit<Transaction, 'id'>; accountName?: string; openingBalance?: number }[] = [];
   for (const row of rows) {
     if (!row) continue;
     if (mode === 'report') {
@@ -128,6 +138,7 @@ export function extractImportedRows(rows: RawRow[]): { tx: Omit<Transaction, 'id
       const description = String(get(row, 'note') ?? '').trim();
       const date = parseDate(get(row, 'date'));
       const accountName = String(get(row, 'account') ?? '').trim();
+      const openingBalance = resolveOpeningBalance(row);
       if (!description && amount == null) continue;
       if (amount == null || type == null) continue;
       out.push({
@@ -139,6 +150,7 @@ export function extractImportedRows(rows: RawRow[]): { tx: Omit<Transaction, 'id
           date: date ? date.toISOString() : undefined,
         },
         accountName: accountName || undefined,
+        openingBalance,
       });
     } else {
       const description = String(get(row, 'description') ?? '').trim();
@@ -146,6 +158,7 @@ export function extractImportedRows(rows: RawRow[]): { tx: Omit<Transaction, 'id
       const type = normalizeType(get(row, 'type'), amount);
       const date = parseDate(get(row, 'date'));
       const accountName = String(get(row, 'account') ?? '').trim();
+      const openingBalance = resolveOpeningBalance(row);
 
       if (!description && amount == null) continue;
       if (amount == null || type == null) continue;
@@ -158,6 +171,7 @@ export function extractImportedRows(rows: RawRow[]): { tx: Omit<Transaction, 'id
           date: date ? date.toISOString() : undefined,
         },
         accountName: accountName || undefined,
+        openingBalance,
       });
     }
   }

@@ -7,7 +7,11 @@ import { useAuth } from './AuthContext';
 
 interface AccountContextType {
   accounts: Account[];
-  addAccount: (account: Omit<Account, 'id'>) => Promise<Account | null>;
+  addAccount: (account: Omit<Account, 'id'>) => Promise<Account>;
+  updateAccount: (
+    accountId: string,
+    updates: Pick<Account, 'name' | 'color' | 'opening_balance'>
+  ) => Promise<Account>;
   selectedAccounts: Account[];
   setSelectedAccountIds: (accountIds: string[]) => void;
   isLoading: boolean;
@@ -56,8 +60,10 @@ export const AccountProvider = ({ children }: { children: ReactNode }) => {
     fetchAccounts();
   }, [fetchAccounts]);
 
-  const addAccount = async (account: Omit<Account, 'id'>): Promise<Account | null> => {
-    if (!user) return null;
+  const addAccount = async (account: Omit<Account, 'id'>): Promise<Account> => {
+    if (!user) {
+      throw new Error('You need to be signed in to create an account.');
+    }
 
     try {
       const { data: existingAccounts, error: existingError } = await supabase
@@ -73,7 +79,7 @@ export const AccountProvider = ({ children }: { children: ReactNode }) => {
         if (existingError.message?.includes('Failed to fetch') || existingError.code === '') {
           console.warn('Network error during duplicate check, proceeding with account creation');
         } else {
-          return null;
+          throw existingError;
         }
       } else if (existingAccounts) {
         return {
@@ -92,7 +98,7 @@ export const AccountProvider = ({ children }: { children: ReactNode }) => {
       .insert([{ 
         name: account.name,
         color: account.color,
-        opening_balance: account.opening_balance || 0,
+        opening_balance: account.opening_balance ?? 0,
         user_id: user.id 
       }])
       .select()
@@ -100,7 +106,7 @@ export const AccountProvider = ({ children }: { children: ReactNode }) => {
 
     if (error) {
       console.error('Error adding account:', error);
-      return null;
+      throw error;
     }
 
     if (data) {
@@ -115,13 +121,67 @@ export const AccountProvider = ({ children }: { children: ReactNode }) => {
       return newAccount;
     }
 
-    return null;
+    throw new Error('Unable to create account. Please try again.');
+  };
+
+  const updateAccount = async (
+    accountId: string,
+    updates: Pick<Account, 'name' | 'color' | 'opening_balance'>
+  ): Promise<Account> => {
+    if (!user) {
+      throw new Error('You need to be signed in to update an account.');
+    }
+
+    const existingAccount = accounts.find(acc => acc.id === accountId);
+    if (!existingAccount) {
+      throw new Error('Account not found.');
+    }
+
+    const optimisticAccount: Account = {
+      ...existingAccount,
+      ...updates,
+    };
+
+    setAccounts(prev => prev.map(acc => (acc.id === accountId ? optimisticAccount : acc)));
+
+    const { data, error } = await supabase
+      .from('accounts')
+      .update({
+        name: updates.name,
+        color: updates.color,
+        opening_balance: updates.opening_balance ?? 0,
+      })
+      .eq('id', accountId)
+      .eq('user_id', user.id)
+      .select('id, name, color, opening_balance')
+      .single();
+
+    if (error) {
+      console.error('Error updating account:', error);
+      setAccounts(prev => prev.map(acc => (acc.id === accountId ? existingAccount : acc)));
+      throw error;
+    }
+
+    if (!data) {
+      setAccounts(prev => prev.map(acc => (acc.id === accountId ? existingAccount : acc)));
+      throw new Error('No updated account returned.');
+    }
+
+    const updatedAccount: Account = {
+      id: data.id,
+      name: data.name,
+      color: data.color,
+      opening_balance: data.opening_balance || 0,
+    };
+
+    setAccounts(prev => prev.map(acc => (acc.id === accountId ? updatedAccount : acc)));
+    return updatedAccount;
   };
 
   const selectedAccounts = accounts.filter(acc => selectedAccountIds.includes(acc.id));
 
   return (
-    <AccountContext.Provider value={{ accounts, addAccount, selectedAccounts, setSelectedAccountIds, isLoading }}>
+    <AccountContext.Provider value={{ accounts, addAccount, updateAccount, selectedAccounts, setSelectedAccountIds, isLoading }}>
       {children}
     </AccountContext.Provider>
   );
