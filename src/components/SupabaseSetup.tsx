@@ -30,7 +30,7 @@ const SupabaseSetup = ({
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    onSubmit(supabaseUrl, supabaseAnonKey);
+    onSubmit(supabaseUrl || "", supabaseAnonKey || "");
   };
 
   return (
@@ -57,7 +57,7 @@ const SupabaseSetup = ({
             <input
               id="supabase-url"
               type="url"
-              value={supabaseUrl}
+              value={supabaseUrl || ""}
               onChange={(event) => setSupabaseUrl(event.target.value)}
               placeholder="https://your-project.supabase.co"
               className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
@@ -71,7 +71,7 @@ const SupabaseSetup = ({
             </label>
             <textarea
               id="supabase-anon-key"
-              value={supabaseAnonKey}
+              value={supabaseAnonKey || ""}
               onChange={(event) => setSupabaseAnonKey(event.target.value)}
               placeholder="Enter your anon key"
               className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
