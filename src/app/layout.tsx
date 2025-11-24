@@ -4,6 +4,7 @@ import { CurrencyProvider } from '@/context/CurrencyContext';
 import { AccountProvider } from '@/context/AccountContext';
 import { TransactionProvider } from '@/context/TransactionContext';
 import { AuthProvider } from '@/context/AuthContext';
+import { SupabaseProvider } from '@/context/SupabaseContext';
 
 export const metadata: Metadata = {
   title: "Expense Tracker",
@@ -18,13 +19,15 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="antialiased">
-        <AuthProvider>
-          <AccountProvider>
-            <TransactionProvider>
-              <CurrencyProvider>{children}</CurrencyProvider>
-            </TransactionProvider>
-          </AccountProvider>
-        </AuthProvider>
+        <SupabaseProvider>
+          <AuthProvider>
+            <AccountProvider>
+              <TransactionProvider>
+                <CurrencyProvider>{children}</CurrencyProvider>
+              </TransactionProvider>
+            </AccountProvider>
+          </AuthProvider>
+        </SupabaseProvider>
       </body>
     </html>
   );

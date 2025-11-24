@@ -2,8 +2,8 @@
 
 import React, { createContext, useContext, useState, ReactNode, useEffect, useCallback } from 'react';
 import { Transaction } from '../types';
-import { supabase } from '@/lib/supabase/client';
 import { useAuth } from './AuthContext';
+import { useSupabase } from './SupabaseContext';
 
 interface TransactionContextType {
   transactions: Transaction[];
@@ -18,6 +18,7 @@ export const TransactionProvider = ({ children }: { children: ReactNode }) => {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const { user } = useAuth();
+  const supabase = useSupabase();
 
   const fetchTransactions = useCallback(async () => {
     if (!user) return;
@@ -47,7 +48,7 @@ export const TransactionProvider = ({ children }: { children: ReactNode }) => {
     } finally {
       setIsLoading(false);
     }
-  }, [user]);
+  }, [supabase, user]);
 
   useEffect(() => {
     fetchTransactions();

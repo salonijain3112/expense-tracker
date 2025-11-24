@@ -1,8 +1,8 @@
 'use client';
 
 import { ReactNode, useState } from 'react';
-import { supabase } from '@/lib/supabase/client';
 import { useAuth } from '@/context/AuthContext';
+import { useSupabase, useSupabaseConfig } from '@/context/SupabaseContext';
 
 interface AuthWrapperProps {
   children: ReactNode;
@@ -13,6 +13,8 @@ interface CustomAuthProps {
 }
 
 const CustomAuth = ({ onSuccess }: CustomAuthProps) => {
+  const supabase = useSupabase();
+  const resetSupabaseConfig = useSupabaseConfig();
   const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -200,6 +202,16 @@ const CustomAuth = ({ onSuccess }: CustomAuthProps) => {
           className="text-sm text-emerald-600 hover:text-emerald-500 font-medium"
         >
           {isSignUp ? 'Already have an account? Sign in' : "Don't have an account? Sign up"}
+        </button>
+      </div>
+
+      <div className="text-center">
+        <button
+          type="button"
+          onClick={() => resetSupabaseConfig()}
+          className="text-xs text-gray-500 hover:text-emerald-600"
+        >
+          Configure Supabase connection
         </button>
       </div>
     </div>

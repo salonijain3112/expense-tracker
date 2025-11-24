@@ -3,12 +3,13 @@
 import { useState, useRef, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useAccounts } from '@/context/AccountContext';
-import { supabase } from '@/lib/supabase/client';
 import Image from 'next/image';
+import { useSupabase } from '@/context/SupabaseContext';
 
 const ProfileButton = () => {
   const { user, signOut } = useAuth();
   const { setSelectedAccountIds } = useAccounts();
+  const supabase = useSupabase();
   const [isOpen, setIsOpen] = useState(false);
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
   const [isClearing, setIsClearing] = useState(false);

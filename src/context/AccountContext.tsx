@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, ReactNode, useEffect, useCallback } from 'react';
 import { Account } from '../types';
-import { supabase } from '@/lib/supabase/client';
+import { useSupabase } from './SupabaseContext';
 import { useAuth } from './AuthContext';
 
 interface AccountContextType {
@@ -24,6 +24,7 @@ export const AccountProvider = ({ children }: { children: ReactNode }) => {
   const [selectedAccountIds, setSelectedAccountIds] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const { user } = useAuth();
+  const supabase = useSupabase();
 
   const fetchAccounts = useCallback(async () => {
     if (!user) return;
@@ -54,7 +55,7 @@ export const AccountProvider = ({ children }: { children: ReactNode }) => {
     } finally {
       setIsLoading(false);
     }
-  }, [user, selectedAccountIds.length]);
+  }, [supabase, user, selectedAccountIds.length]);
 
   useEffect(() => {
     fetchAccounts();
