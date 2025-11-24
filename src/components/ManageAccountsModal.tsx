@@ -58,7 +58,7 @@ export const ManageAccountsModal = ({ onClose }: ManageAccountsModalProps) => {
         ...prev,
         [accountId]: {
           ...prev[accountId],
-          opening_balance: formatOpeningBalanceForDisplay(validation.value),
+          opening_balance: formatOpeningBalanceForDisplay(validation.value || 0),
         },
       }));
     }
